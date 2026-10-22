@@ -73,21 +73,31 @@ export function startUpload(file: File, onProgress: (sent: number, total: number
     report();
 
     const pending = Array.from({ length: partCount }, (_, i) => i + 1).filter((n) => !done.has(n));
-    const urls = new Map<number, string>();
-    const fetchUrls = async (nums: number[]) => {
-      const r = await api<{ urls: Record<string, string> }>(`/uploads/${id}/parts`, { method: "POST", json: { parts: nums } });
-      for (const [k, v] of Object.entries(r.urls)) urls.set(Number(k), v);
+    // One presign call covers the next URLS_PER_CALL parts; workers that need a part
+    // already requested share that call's promise instead of firing their own.
+    const urls = new Map<number, Promise<string>>();
+    const requestUrls = (nums: number[]) => {
+      const call = api<{ urls: Record<string, string> }>(`/uploads/${id}/parts`, { method: "POST", json: { parts: nums } });
+      for (const n of nums) {
+        const url = call.then((r) => r.urls[n]);
+        url.catch(() => {}); // the awaiting worker surfaces the error; unclaimed parts must not warn
+        urls.set(n, url);
+      }
+    };
+    const urlFor = (n: number) => {
+      if (!urls.has(n)) requestUrls([n, ...pending.slice(0, URLS_PER_CALL - 1).filter((m) => !urls.has(m))]);
+      return urls.get(n)!;
     };
 
     const worker = async () => {
       for (;;) {
         const n = pending.shift();
         if (n === undefined) return;
-        if (!urls.has(n)) await fetchUrls([n, ...pending.slice(0, URLS_PER_CALL - 1).filter((m) => !urls.has(m))]);
+        const url = await urlFor(n);
         const blob = file.slice((n - 1) * partSize, Math.min(n * partSize, file.size));
         for (let attempt = 1; ; attempt++) {
           try {
-            await putPart(urls.get(n)!, blob, ctl.signal, (l) => (inFlight.set(n, l), report()));
+            await putPart(url, blob, ctl.signal, (l) => (inFlight.set(n, l), report()));
             break;
           } catch (e) {
             inFlight.delete(n);
