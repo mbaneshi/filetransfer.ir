@@ -9,7 +9,7 @@ Iran-focused file sharing and hosting platform.
 - PostgreSQL: users, files, shares, plans, payments
 - Redis: OTPs, sessions, rate limits, background jobs
 - Object storage: Arvan Object Storage / S3-compatible storage
-- `tusd`: resumable uploads for large files
+- Direct-to-bucket multipart uploads via presigned part URLs (no `tusd`: file bytes must never cross our small VM)
 - Caddy: HTTPS and reverse proxy
 
 ## Run locally
@@ -22,8 +22,7 @@ Local services use non-default host ports:
 
 - Web: `http://localhost:18473`
 - API health: `http://localhost:18474/health`
-- MinIO API: `http://localhost:19000`
-- MinIO console: `http://localhost:19001`
+- Local S3 (versitygw; MinIO's image is no longer published): `http://localhost:19000`
 - PostgreSQL: `localhost:15432`
 - Redis: `localhost:16379`
 
