@@ -1,8 +1,6 @@
-@import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800&display=swap');
-
 :root { --ink:#172033; --muted:#748096; --blue:#3568f5; --line:#e8edf5; --bg:#f8faff; }
 * { box-sizing:border-box; }
-body { margin:0; background:var(--bg); color:var(--ink); font-family:Vazirmatn,Arial,sans-serif; }
+body { margin:0; background:var(--bg); color:var(--ink); font-family:'Vazirmatn Variable',Tahoma,sans-serif; }
 .shell { max-width:1160px; margin:auto; padding:0 28px; }
 .nav { height:88px; display:flex; align-items:center; justify-content:space-between; }
 .brand { font-size:20px; font-weight:800; letter-spacing:-.5px; direction:ltr; }
