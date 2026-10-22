@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"filetransfer.ir/api/internal/auth"
+	"filetransfer.ir/api/internal/files"
+	"filetransfer.ir/api/internal/storage"
 	"filetransfer.ir/api/migrations"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -31,7 +33,8 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.health)
 	mux.HandleFunc("GET /api/v1/config", s.config)
-	registerAuth(mux)
+	authH, pool := registerAuth(mux)
+	registerFiles(mux, authH, pool, maxFileSize)
 
 	address := ":" + getenv("API_PORT", "8080")
 	log.Printf("filetransfer API listening on %s", address)
@@ -79,11 +82,11 @@ func getenv(key, fallback string) string {
 
 // registerAuth wires OTP login when Postgres and Redis are configured. Without
 // them the API still serves /health and /api/v1/config.
-func registerAuth(mux *http.ServeMux) {
+func registerAuth(mux *http.ServeMux) (*auth.Handlers, *pgxpool.Pool) {
 	dbURL, redisURL := os.Getenv("DATABASE_URL"), os.Getenv("REDIS_URL")
 	if dbURL == "" || redisURL == "" {
 		log.Print("auth disabled: DATABASE_URL and REDIS_URL are required")
-		return
+		return nil, nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -129,4 +132,38 @@ func registerAuth(mux *http.ServeMux) {
 		TrustProxy:   os.Getenv("TRUST_PROXY") == "1",
 	}
 	h.Register(mux)
+	return h, pool
+}
+
+// registerFiles wires uploads and shares when object storage is configured.
+func registerFiles(mux *http.ServeMux, authH *auth.Handlers, pool *pgxpool.Pool, maxFileSize int64) {
+	endpoint, bucket := os.Getenv("OBJECT_STORAGE_ENDPOINT"), os.Getenv("OBJECT_STORAGE_BUCKET")
+	if authH == nil || endpoint == "" || bucket == "" {
+		log.Print("files disabled: needs auth plus OBJECT_STORAGE_ENDPOINT and OBJECT_STORAGE_BUCKET")
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if _, err := pool.Exec(ctx, migrations.Files); err != nil {
+		log.Fatalf("migrate files: %v", err)
+	}
+
+	store := storage.New(storage.Config{
+		Endpoint:       endpoint,
+		PublicEndpoint: os.Getenv("OBJECT_STORAGE_PUBLIC_ENDPOINT"),
+		Region:         os.Getenv("OBJECT_STORAGE_REGION"),
+		Bucket:         bucket,
+		AccessKey:      os.Getenv("OBJECT_STORAGE_ACCESS_KEY"),
+		SecretKey:      os.Getenv("OBJECT_STORAGE_SECRET_KEY"),
+		PathStyle:      getenv("OBJECT_STORAGE_PATH_STYLE", "1") == "1",
+	})
+	if getenv("APP_ENV", "development") == "development" {
+		if err := store.EnsureBucket(ctx); err != nil {
+			log.Fatalf("ensure bucket: %v", err)
+		}
+	}
+
+	repo := files.PG{Pool: pool}
+	files.NewHandlers(repo, store, authH, maxFileSize, getenv("PUBLIC_BASE_URL", "http://localhost:3000")).Register(mux)
+	go files.RunJanitor(context.Background(), repo, store, 10*time.Minute, 24*time.Hour)
 }
