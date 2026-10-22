@@ -24,9 +24,12 @@ services:
     ports:
       - "127.0.0.1:18474:8080"
     depends_on:
-      - postgres
-      - redis
-      - s3
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      s3:
+        condition: service_started
 
   postgres:
     image: postgres:18-alpine
@@ -38,11 +41,21 @@ services:
       - "127.0.0.1:15432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U filetransfer -d filetransfer"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
 
   redis:
     image: redis:8-alpine
     ports:
       - "127.0.0.1:16379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
 
   s3:
     image: ghcr.io/versity/versitygw:v1.9.0
