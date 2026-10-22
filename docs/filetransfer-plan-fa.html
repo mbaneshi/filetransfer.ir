@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>گزارش و برنامه راه‌اندازی FileTransfer.ir</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800&display=swap');
+    :root { --ink:#182235; --muted:#68758a; --blue:#315ee8; --soft:#eef3ff; --line:#dfe6f0; --bg:#f6f8fc; --green:#11855d; --orange:#b66a00; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--ink); font-family:Vazirmatn, Tahoma, sans-serif; line-height:1.95; }
+    .page { max-width:1100px; margin:0 auto; padding:34px 22px 70px; }
+    .hero { background:linear-gradient(135deg,#183da8,#4778f4); color:#fff; border-radius:24px; padding:42px 44px; box-shadow:0 18px 45px #315ee82b; }
+    .eyebrow { font-size:13px; opacity:.8; margin-bottom:10px; }
+    h1 { margin:0; font-size:38px; line-height:1.35; }
+    .hero p { margin:16px 0 0; max-width:760px; opacity:.92; }
+    .meta { display:flex; gap:18px; flex-wrap:wrap; margin-top:24px; font-size:13px; opacity:.85; }
+    section { background:#fff; border:1px solid var(--line); border-radius:18px; padding:28px 30px; margin-top:22px; box-shadow:0 7px 24px #18223508; }
+    h2 { margin:0 0 16px; color:#193caa; font-size:23px; }
+    h3 { margin:20px 0 8px; font-size:17px; }
+    p { margin:8px 0; }
+    .lead { font-size:17px; color:#33415a; }
+    .grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+    .card { border:1px solid var(--line); border-radius:14px; padding:18px; background:#fbfcff; }
+    .card strong { display:block; font-size:22px; color:var(--blue); margin-bottom:4px; }
+    .status { display:inline-block; border-radius:999px; padding:2px 10px; font-size:12px; font-weight:700; }
+    .now { background:#fff1d7; color:var(--orange); }
+    .done { background:#dff7ed; color:var(--green); }
+    .next { background:var(--soft); color:var(--blue); }
+    ul, ol { margin:8px 0; padding-right:24px; }
+    li { margin:5px 0; }
+    table { width:100%; border-collapse:collapse; margin-top:12px; font-size:14px; }
+    th, td { border:1px solid var(--line); padding:10px 12px; text-align:right; vertical-align:top; }
+    th { background:#f0f4ff; color:#1d43ad; }
+    .formula { direction:ltr; text-align:center; background:#172033; color:#fff; border-radius:12px; padding:16px; margin:16px 0; font-family:ui-monospace,monospace; }
+    .warning { border-right:4px solid #f1a72b; background:#fff9ed; padding:13px 16px; border-radius:9px; }
+    .flow { display:flex; align-items:center; justify-content:center; gap:8px; flex-wrap:wrap; direction:ltr; margin:18px 0; }
+    .flow span { direction:rtl; background:var(--soft); color:#2347aa; border-radius:10px; padding:9px 13px; font-size:13px; }
+    .arrow { color:#8290a6; font-size:20px; }
+    .sources a { color:var(--blue); word-break:break-word; }
+    footer { color:var(--muted); text-align:center; font-size:12px; margin-top:24px; }
+    @media(max-width:760px) { .hero { padding:28px 24px; } h1 { font-size:29px; } .grid { grid-template-columns:1fr; } section { padding:22px 18px; } table { display:block; overflow-x:auto; white-space:nowrap; } }
+    @media print { body { background:#fff; } .page { max-width:none; padding:0; } section, .hero { box-shadow:none; break-inside:avoid; } }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="hero">
+      <div class="eyebrow">گزارش محصول، اقتصاد و نقشه راه</div>
+      <h1>برنامه راه‌اندازی FileTransfer.ir</h1>
+      <p>سرویس ایرانی آپلود، نگهداری و اشتراک‌گذاری امن فایل با تمرکز بر سادگی، سرعت داخل ایران، لینک‌های قابل‌کنترل و قیمت‌گذاری شفاف.</p>
+      <div class="meta"><span>نسخه گزارش: ۱٫۰</span><span>تاریخ: ۳۰ مهر ۱۴۰۵</span><span>وضعیت: مرحله طراحی و آماده‌سازی MVP</span></div>
+    </header>
+
+    <section>
+      <h2>خلاصه مدیریتی</h2>
+      <p class="lead">پروژه در حال حاضر یک اسکلت اولیه قابل اجرا دارد: رابط کاربری فارسی، API پایه و زیرساخت محلی Docker. قابلیت اصلی محصول، یعنی آپلود واقعی، ذخیره‌سازی، حساب کاربری، لینک اشتراک‌گذاری و پرداخت هنوز باید ساخته شود.</p>
+      <div class="grid">
+        <div class="card"><strong>۵۰ گیگابایت</strong>حداکثر حجم هدف هر فایل در MVP</div>
+        <div class="card"><strong>۲۰٪</strong>مارک‌آپ هدف روی هزینه واقعی</div>
+        <div class="card"><strong>پیش‌پرداخت</strong>مدل پیشنهادی برای کنترل ریسک هزینه</div>
+      </div>
+    </section>
+
+    <section>
+      <h2>وضعیت فعلی پروژه</h2>
+      <table>
+        <thead><tr><th>بخش</th><th>وضعیت</th><th>شرح</th></tr></thead>
+        <tbody>
+          <tr><td>رابط کاربری</td><td><span class="status done">موجود</span></td><td>صفحه فارسی و راست‌به‌چپ، ناحیه آپلود نمایشی، بخش ویژگی‌ها و طراحی واکنش‌گرا.</td></tr>
+          <tr><td>API</td><td><span class="status done">پایه</span></td><td>سرویس Go با مسیرهای <code>/health</code> و <code>/api/v1/config</code>.</td></tr>
+          <tr><td>Docker</td><td><span class="status done">موجود</span></td><td>سرویس‌های Web، API، PostgreSQL، Redis و MinIO در Compose.</td></tr>
+          <tr><td>آپلود فایل</td><td><span class="status now">ساخته نشده</span></td><td>اتصال دکمه انتخاب فایل، آپلود resumable و نهایی‌سازی فایل لازم است.</td></tr>
+          <tr><td>کاربر و ورود</td><td><span class="status now">ساخته نشده</span></td><td>OTP پیامکی، نشست، حساب کاربری و بازیابی دسترسی لازم است.</td></tr>
+          <tr><td>پرداخت و کیف پول</td><td><span class="status now">ساخته نشده</span></td><td>کیف پول، افزایش اعتبار، رزرو هزینه، مصرف و بازپرداخت لازم است.</td></tr>
+          <tr><td>آروان</td><td><span class="status now">متصل نشده</span></td><td>در محیط محلی MinIO و در محیط تولید Arvan Object Storage استفاده خواهد شد.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>مدل اقتصادی پیشنهادی</h2>
+      <p>قیمت‌گذاری باید از یک دفترکل هزینه و مصرف تغذیه شود و به نرخ‌های ثابت و قدیمی وابسته نباشد.</p>
+      <div class="formula">قیمت مشتری = (هزینه آروان + زیرساخت + کارمزد پرداخت + پشتیبانی و ریسک) × ۱٫۲۰</div>
+      <div class="warning">نکته مهم: هزینه‌به‌علاوه ۲۰٪ به معنی حاشیه سود ناخالص ۲۰٪ نیست. اگر هزینه ۱۰۰ باشد، قیمت ۱۲۰ و حاشیه سود ناخالص ۱۶٫۶۷٪ خواهد بود. هزینه‌های ثابت، مالیات، بازپرداخت، سوءاستفاده و خطا باید جداگانه در نظر گرفته شوند.</div>
+      <h3>مدل فروش</h3>
+      <ul>
+        <li>طرح رایگان محدود برای جذب کاربر و آزمایش محصول.</li>
+        <li>کیف پول پیش‌پرداختی به تومان.</li>
+        <li>بسته‌های ماهانه شامل فضای ذخیره‌سازی و ترافیک دانلود.</li>
+        <li>کسر مصرف بر اساس فضای ذخیره‌شده، دانلود، درخواست‌ها و امکانات جانبی.</li>
+        <li>توقف یا محدودسازی خودکار در صورت کمبود اعتبار.</li>
+        <li>قرارداد سازمانی با SLA، پشتیبانی و ظرفیت اختصاصی.</li>
+      </ul>
+      <h3>واحدهای قابل اندازه‌گیری</h3>
+      <p>فضای ذخیره‌سازی بر حسب GB-month، آپلود، دانلود، درخواست‌های خواندن/نوشتن، اسکن ضدبدافزار، Access Point/CDN و هزینه زیرساخت.</p>
+      <p>صفحه رسمی آروان در زمان تهیه این گزارش، بسته پایه رایگان، بسته رشد ۵۰۰ گیگابایت/۲ ترابایت با مبلغ ۱٬۵۰۰٬۰۰۰ تومان و بسته حرفه‌ای ۵ ترابایت/۲۰ ترابایت با مبلغ ۱۵٬۰۰۰٬۰۰۰ تومان را نمایش می‌دهد و برای مصرف مازاد، PAYG دارد. این مبالغ باید پیش از عرضه با حساب و قرارداد واقعی آروان تطبیق داده شوند.</p>
+    </section>
+
+    <section>
+      <h2>معماری هدف</h2>
+      <div class="flow"><span>مرورگر کاربر</span><i class="arrow">←</i><span>Next.js</span><i class="arrow">←</i><span>Go API</span><i class="arrow">←</i><span>Workerها</span></div>
+      <div class="flow"><span>Go API</span><i class="arrow">←</i><span>PostgreSQL</span><i class="arrow">←</i><span>کاربران، فایل‌ها، کیف پول</span></div>
+      <div class="flow"><span>مرورگر</span><i class="arrow">←</i><span>Presigned URL کوتاه‌مدت</span><i class="arrow">←</i><span>Arvan S3 / MinIO</span></div>
+      <ul>
+        <li>کلیدهای Arvan فقط روی سرور نگهداری می‌شوند.</li>
+        <li>مرورگر مستقیماً با کلید اصلی به Object Storage وصل نمی‌شود.</li>
+        <li>Redis برای OTP، نشست، محدودیت درخواست، قفل آپلود و صف کارها استفاده می‌شود.</li>
+        <li>Workerها فایل را نهایی، اسکن، منقضی، حذف و هزینه‌گذاری می‌کنند.</li>
+        <li>MinIO برای توسعه محلی و Arvan برای تولید پشت یک رابط ذخیره‌سازی مشترک قرار می‌گیرند.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>الزامات حقوقی و عملیاتی</h2>
+      <p>این بخش فهرست مهندسی و محصول است و جایگزین بررسی وکیل یا مشاور مالیاتی در ایران نیست.</p>
+      <ul>
+        <li>شرایط استفاده و قوانین استفاده مجاز.</li>
+        <li>سیاست حریم خصوصی با توضیح داده‌های ضروری و اختیاری.</li>
+        <li>فرآیند گزارش سوءاستفاده، حذف محتوا و رسیدگی به شکایت.</li>
+        <li>سیاست حق مؤلف و رسیدگی به درخواست‌های نقض کپی‌رایت.</li>
+        <li>قوانین کیف پول، انقضای اعتبار، بازپرداخت و بستن حساب.</li>
+        <li>برنامه نگهداری و حذف داده و فرآیند Legal Hold.</li>
+        <li>رمزنگاری اطلاعات هویتی، TLS، مدیریت Secret، پشتیبان‌گیری و ثبت رویدادها.</li>
+        <li>احراز هویت، محدودیت سرعت، تشخیص سوءاستفاده و ثبت مسیر حسابرسی.</li>
+      </ul>
+      <p>منابع اولیه بررسی‌شده: <a href="https://www.wipo.int/wipolex/en/legislation/details/7711">قانون تجارت الکترونیکی ایران</a> و <a href="https://nezamat.ir/post-44947/">دستورالعمل حفاظت از حریم خصوصی و داده کاربران</a>.</p>
+    </section>
+
+    <section>
+      <h2>نقشه راه اجرایی</h2>
+      <table>
+        <thead><tr><th>مرحله</th><th>خروجی</th><th>کارهای اصلی</th></tr></thead>
+        <tbody>
+          <tr><td>۱. هسته فنی</td><td><span class="status next">MVP قابل استفاده</span></td><td>مدل داده، حساب کاربری، OTP، آپلود resumable، MinIO، لینک دانلود و حذف فایل.</td></tr>
+          <tr><td>۲. کنترل و امنیت</td><td><span class="status next">نسخه آزمایشی امن</span></td><td>لینک رمزدار و منقضی، محدودیت دانلود، اسکن، rate limit، audit log و پشتیبان‌گیری.</td></tr>
+          <tr><td>۳. Arvan تولید</td><td><span class="status next">آماده استقرار</span></td><td>Provider آروان، presigned URL، lifecycle، سنجش مصرف و تست بازیابی.</td></tr>
+          <tr><td>۴. درآمد</td><td><span class="status next">نسخه پولی</span></td><td>کیف پول، درگاه، دفترکل، رزرو مصرف، صورتحساب، بازپرداخت و داشبورد هزینه.</td></tr>
+          <tr><td>۵. مدیریت</td><td><span class="status next">عملیات پایدار</span></td><td>پنل ادمین، شکایت، abuse/takedown، گزارش مالی، اعلان و مانیتورینگ.</td></tr>
+          <tr><td>۶. عرضه عمومی</td><td><span class="status next">Launch</span></td><td>بازبینی حقوقی، تست بار، تست امنیت، SLA، مستندات و پشتیبانی.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>فهرست کارهای آینده</h2>
+      <h3>اولویت بسیار بالا</h3>
+      <ul>
+        <li>تعریف schema دیتابیس و migrationها.</li>
+        <li>پیاده‌سازی ورود با OTP و نشست امن.</li>
+        <li>تبدیل ناحیه نمایشی به انتخاب فایل واقعی.</li>
+        <li>آپلود resumable و نهایی‌سازی فایل.</li>
+        <li>ایجاد لینک خصوصی با تاریخ انقضا.</li>
+        <li>اتصال MinIO و تست کامل دانلود.</li>
+      </ul>
+      <h3>اولویت بالا</h3>
+      <ul>
+        <li>اتصال Arvan S3 با تنظیمات محیطی و Secret Manager.</li>
+        <li>ثبت مصرف و ساخت دفترکل هزینه.</li>
+        <li>پیاده‌سازی کیف پول و درگاه پرداخت.</li>
+        <li>اسکن فایل و سیاست برخورد با فایل مشکوک.</li>
+        <li>داشبورد ادمین و گزارش هزینه/درآمد.</li>
+      </ul>
+      <h3>پیش از انتشار عمومی</h3>
+      <ul>
+        <li>تکمیل Terms، Privacy، Refund و Acceptable Use به زبان فارسی.</li>
+        <li>بررسی حقوقی و مالیاتی مستقل.</li>
+        <li>تست بار برای آپلود و دانلود هم‌زمان.</li>
+        <li>تست backup/restore و حذف قطعی داده.</li>
+        <li>تعریف پشتیبانی، SLA، تماس سوءاستفاده و فرآیند حادثه.</li>
+      </ul>
+    </section>
+
+    <section class="sources">
+      <h2>منابع و ملاحظات</h2>
+      <ul>
+        <li><a href="https://www.arvancloud.ir/fa/pricing/cloud-storage">قیمت‌گذاری فضای ابری آروان</a></li>
+        <li><a href="https://docs.arvancloud.ir/en/object-storage/s3">مستندات ArvanCloud S3</a></li>
+        <li><a href="https://www.wipo.int/wipolex/en/legislation/details/7711">قانون تجارت الکترونیکی ایران</a></li>
+        <li><a href="https://nezamat.ir/post-44947/">دستورالعمل حفاظت از حریم خصوصی کاربران</a></li>
+      </ul>
+      <div class="warning">قیمت‌ها، شرایط سرویس‌دهنده، درگاه پرداخت و تفسیر مقررات ممکن است تغییر کنند. قبل از فعال‌سازی پرداخت واقعی، همه موارد باید با قرارداد و مشاور محلی بررسی و در سیستم به‌صورت نسخه‌دار ثبت شوند.</div>
+    </section>
+
+    <footer>FileTransfer.ir · گزارش داخلی برنامه محصول · قابل چاپ از طریق Print مرورگر</footer>
+  </main>
+</body>
+</html>

@@ -1,0 +1,11 @@
+.sid-identity
+.envrc
+.env
+node_modules/
+.next/
+dist/
+coverage/
+
+
+# branch-rules: per-issue worktrees
+.worktrees/
