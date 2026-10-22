@@ -17,7 +17,9 @@ read -r -d '' REMOTE <<'EOS' || true
 set -euo pipefail
 ROOT=/opt/filetransfer
 install -d -m 755 "$ROOT" "$ROOT/bin" "$ROOT/app" "$ROOT/app/incoming"
-install -d -m 700 "$ROOT/backups" "$ROOT/pgdata" "$ROOT/redisdata"
+install -d -m 700 "$ROOT/backups" "$ROOT/redisdata"
+# pgdata is the mount point of /var/lib/postgresql; the postgres user must be able to enter it. PG creates and locks (700) its own versioned dir inside.
+install -d -m 755 "$ROOT/pgdata"
 
 if [ -f "$ROOT/app.env" ]; then
   echo "app.env exists: left untouched"
