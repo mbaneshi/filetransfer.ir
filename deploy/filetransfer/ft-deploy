@@ -1,0 +1,150 @@
+#!/usr/bin/env bash
+# Runs on the box as root:
+#   /opt/filetransfer/bin/ft-deploy <tag> <api-layers> <web-layers> <commit> <tarball>
+# Loads a verified bundle, backs up, starts it, proves it, and restores the previous release on any failure.
+# Operator notes: a failed deploy burns its tag (the loaded images stay and a retry is refused). Cut a new tag,
+# or run `docker rmi filetransfer-api:<tag> filetransfer-web:<tag>` on the box first. Log: /var/log/ft-deploy.log.
+set -euo pipefail
+
+TAG="${1:?tag}"; WANT_API="${2:?api layers digest}"; WANT_WEB="${3:?web layers digest}"
+COMMIT="${4:?commit}"; TARBALL="${5:?tarball}"
+ROOT=/opt/filetransfer
+APP=$ROOT/app
+ENVF=$ROOT/app.env
+LOG=/var/log/ft-deploy.log
+log() { echo "$(date -u +%FT%TZ) $*" | tee -a "$LOG"; }
+die() { log "REFUSED/FAILED: $*"; exit 1; }
+
+[[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || die "bad tag"
+[[ "$WANT_API" =~ ^[0-9a-f]{64}$ ]] || die "bad api layers digest"
+[[ "$WANT_WEB" =~ ^[0-9a-f]{64}$ ]] || die "bad web layers digest"
+[[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]] || die "bad commit"
+[ "$TARBALL" = "$APP/incoming/$TAG.tar.gz" ] || die "tarball must be $APP/incoming/$TAG.tar.gz"
+
+exec 9>/var/lock/ft-deploy.lock
+flock -n 9 || die "another deploy is running (its tarball is left in place)"
+trap 'rm -f "$TARBALL"; [ -f "$LOG" ] && { tail -n 2000 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"; }' EXIT
+
+[ -s "$TARBALL" ] || die "no tarball at $TARBALL"
+for img in api web; do
+  if docker image inspect "filetransfer-$img:$TAG" >/dev/null 2>&1; then
+    die "filetransfer-$img:$TAG already exists on the box; cut a new tag or run: docker rmi filetransfer-api:$TAG filetransfer-web:$TAG"
+  fi
+done
+
+# The secrets file is made by bootstrap.sh and completed by hand. Only key names are ever printed.
+[ -f "$ENVF" ] || die "$ENVF missing; run deploy/filetransfer/bootstrap.sh first"
+[ "$(stat -c %a "$ENVF")" = 600 ] || die "$ENVF must be mode 600"
+if grep -Eq "^[A-Z_]+=.*CHANGE_ME" "$ENVF"; then
+  die "$ENVF still has placeholders: $(grep -E "^[A-Z_]+=.*CHANGE_ME" "$ENVF" | cut -d= -f1 | tr "\n" " ")"
+fi
+envval() { grep -E "^$1=" "$ENVF" | head -n 1 | cut -d= -f2-; }
+FT_HOST=$(envval FT_HOST); ROBOTS=$(envval FT_ROBOTS)
+[ -n "$FT_HOST" ] || die "FT_HOST is not set in $ENVF"
+URL="https://$FT_HOST"
+RES=(--resolve "$FT_HOST:443:127.0.0.1")
+
+# Deploys never depend on a registry being reachable: the base images were pulled at bootstrap.
+for base in postgres:18-alpine redis:8-alpine; do
+  docker image inspect "$base" >/dev/null 2>&1 || die "base image $base missing; run bootstrap.sh"
+done
+
+used=$(df --output=pcent / | tail -1 | tr -dc 0-9)
+[ "$used" -lt 80 ] || die "disk is ${used}% full (limit 80%)"
+free_kb=$(df --output=avail -k / | tail -1 | tr -dc 0-9)
+tar_kb=$(( $(stat -c %s "$TARBALL") / 1024 ))
+last_dump=$(ls -t "$ROOT"/backups/pg-*.sql.gz 2>/dev/null | head -1 || true)
+dump_kb=0
+[ -n "$last_dump" ] && dump_kb=$(du -sk "$last_dump" | cut -f1)
+need_kb=$(( tar_kb * 5 / 2 + dump_kb * 2 ))
+[ "$free_kb" -gt "$need_kb" ] || die "free space ${free_kb}K is below the ${need_kb}K this deploy needs"
+
+PREV=""
+[ -f "$APP/current" ] && PREV=$(cat "$APP/current")
+
+if docker ps --format '{{.Names}}' | grep -qx ft-postgres; then
+  log "backup before deploy"
+  "$ROOT/backup.sh" | tee -a "$LOG"
+else
+  log "no running ft-postgres: first deploy, nothing to back up"
+fi
+
+log "loading $TAG"
+gunzip -c "$TARBALL" | docker load >/dev/null
+layers() { docker image inspect "$1" --format '{{json .RootFS.Layers}}' 2>/dev/null | sha256sum | cut -d' ' -f1; }
+for pair in "api:$WANT_API" "web:$WANT_WEB"; do
+  img=${pair%%:*}; want=${pair#*:}
+  got=$(layers "filetransfer-$img:$TAG")
+  if [ "$got" != "$want" ]; then
+    docker rmi "filetransfer-api:$TAG" "filetransfer-web:$TAG" >/dev/null 2>&1 || true
+    die "$img layer digest on the box ($got) is not the verified one ($want); the loaded images were removed"
+  fi
+done
+
+dc() { local t="$1"; shift; FT_IMAGE_TAG="$t" docker compose --env-file "$ENVF" -f "$APP/docker-compose.yml" "$@"; }
+
+wait_healthy() {
+  for _ in $(seq 1 45); do
+    ok=1
+    for c in ft-postgres ft-redis ft-api ft-web; do
+      [ "$(docker inspect -f '{{.State.Health.Status}}' "$c" 2>/dev/null)" = healthy ] || ok=0
+    done
+    [ "$ok" = 1 ] && return 0
+    sleep 2
+  done
+  return 1
+}
+
+rollback() {
+  log "rolling back"
+  if [ -n "$PREV" ]; then
+    dc "$PREV" up -d >/dev/null || log "ROLLBACK FAILED: compose up of $PREV"
+    if wait_healthy; then log "restored $PREV and it is healthy"; else log "ROLLBACK FAILED: $PREV is not healthy; the app is down"; fi
+  else
+    dc "$TAG" down >/dev/null 2>&1 || true
+    log "no previous release; the app is stopped (data under $ROOT is untouched)"
+  fi
+}
+fail() { log "FAILED: $*"; rollback; exit 1; }
+
+log "starting $TAG"
+dc "$TAG" up -d >/dev/null || fail "compose up"
+wait_healthy || fail "containers never became healthy"
+
+# Everything below goes through Traefik with real TLS, so it proves routing and the certificate too.
+# On a first deploy Let's Encrypt needs $FT_HOST to already resolve to this box.
+vj=""
+for _ in $(seq 1 45); do
+  vj=$(curl -fsS --max-time 5 "${RES[@]}" "$URL/version.json" 2>/dev/null) && break
+  sleep 2
+done
+[ -n "$vj" ] || fail "$URL/version.json did not answer (DNS, certificate or routing)"
+echo "$vj" | grep -Eq "\"commit\": *\"$COMMIT\"" || fail "version.json commit is not $COMMIT"
+echo "$vj" | grep -Eq "\"version\": *\"${TAG#v}\"" || fail "version.json version is not ${TAG#v}"
+
+page=$(curl -fsS --max-time 5 "${RES[@]}" "$URL/login" || true)
+grep -qi '<html' <<<"$page" || fail "$URL/login is not an HTML page"
+
+if [ -n "$ROBOTS" ]; then
+  hdr=$(curl -fsSI --max-time 5 "${RES[@]}" "$URL/" | tr -d '\r' || true)
+  grep -qix "x-robots-tag: $ROBOTS" <<<"$hdr" || fail "X-Robots-Tag is not \"$ROBOTS\" on $URL"
+fi
+
+# /api must reach the Go API (an unauthenticated JSON 401), not fall through to the web app's 404 page.
+code=$(curl -s -o /tmp/ft-me.json -w '%{http_code}' --max-time 8 "${RES[@]}" "$URL/api/v1/auth/me" || true)
+{ [ "$code" = 401 ] && grep -q unauthenticated /tmp/ft-me.json; } || fail "$URL/api/v1/auth/me returned $code, expected the API's 401"
+rm -f /tmp/ft-me.json
+
+migrated=$(docker exec ft-postgres psql -U filetransfer -d filetransfer -tAc "select to_regclass('public.users') is not null and to_regclass('public.files') is not null" 2>/dev/null || true)
+[ "$migrated" = t ] || fail "database tables (users, files) are not there; the API's migrations did not run"
+
+if ss -tlnH | awk '{print $4}' | grep -Eq ':(5432|6379)$'; then fail "Postgres or Redis is listening on a host port"; fi
+
+echo "$TAG" > "$APP/current"
+[ -n "$PREV" ] && echo "$PREV" > "$APP/previous"
+for img in api web; do
+  docker images "filetransfer-$img" --format '{{.CreatedAt}}|{{.Tag}}' | sort -r | cut -d'|' -f2 | tail -n +4 | while read -r old; do
+    [ "$old" = "$TAG" ] || [ "$old" = "$PREV" ] || docker rmi "filetransfer-$img:$old" >/dev/null 2>&1 || true
+  done
+done
+log "DEPLOYED $TAG ($COMMIT), previous ${PREV:-none}; disk $(df --output=pcent / | tail -1 | tr -d ' ')"
