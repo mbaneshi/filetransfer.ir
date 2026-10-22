@@ -3,7 +3,7 @@ export default function HomePage() {
     <main className="shell">
       <nav className="nav">
         <div className="brand"><span className="brandMark">↑</span> FileTransfer</div>
-        <div className="navLinks"><a href="#plans">تعرفه‌ها</a><a href="#help">راهنما</a><button className="login">ورود</button></div>
+        <div className="navLinks"><a href="#plans">تعرفه‌ها</a><a href="#help">راهنما</a><a className="login" href="/login">ورود</a></div>
       </nav>
 
       <section className="hero">
@@ -15,7 +15,7 @@ export default function HomePage() {
           <div className="uploadIcon">↑</div>
           <h2>فایل خود را اینجا رها کنید</h2>
           <p>یا برای انتخاب فایل کلیک کنید</p>
-          <button className="primary">انتخاب فایل</button>
+          <a className="primary" href="/upload">انتخاب فایل</a>
           <small>حداکثر حجم هر فایل: ۵۰ گیگابایت</small>
         </div>
 
