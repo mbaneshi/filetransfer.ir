@@ -1,0 +1,103 @@
+# Runs on the box as /opt/filetransfer/app/docker-compose.yml, always via ft-deploy:
+#   docker compose --env-file /opt/filetransfer/app.env ...
+# Secrets live only in /opt/filetransfer/app.env on the box (never in this repo).
+name: filetransfer
+
+services:
+  api:
+    image: filetransfer-api:${FT_IMAGE_TAG:?set by ft-deploy}
+    container_name: ft-api
+    restart: unless-stopped
+    mem_limit: 128m
+    env_file: /opt/filetransfer/app.env
+    environment:
+      APP_ENV: production
+      API_PORT: "8080"
+      TRUST_PROXY: "1" # exactly one trusted proxy (Traefik) is in front
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    logging: &logging
+      driver: json-file
+      options: {max-size: 10m, max-file: "3"}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks: [web, ft]
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=web
+      - traefik.http.routers.ft-api.rule=Host(`${FT_HOST:?}`) && PathPrefix(`/api/`)
+      - traefik.http.routers.ft-api.priority=100
+      - traefik.http.routers.ft-api.entrypoints=websecure
+      - traefik.http.routers.ft-api.tls.certresolver=le
+      - traefik.http.services.ft-api.loadbalancer.server.port=8080
+
+  web:
+    image: filetransfer-web:${FT_IMAGE_TAG:?set by ft-deploy}
+    container_name: ft-web
+    restart: unless-stopped
+    mem_limit: 192m
+    logging: *logging
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/version.json"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks: [web]
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=web
+      - traefik.http.middlewares.ft-robots.headers.customresponseheaders.X-Robots-Tag=${FT_ROBOTS:-noindex, nofollow}
+      - traefik.http.middlewares.ft-compress.compress=true
+      - traefik.http.routers.ft-web.rule=Host(`${FT_HOST:?}`)
+      - traefik.http.routers.ft-web.entrypoints=websecure
+      - traefik.http.routers.ft-web.tls.certresolver=le
+      - traefik.http.routers.ft-web.middlewares=ft-robots,ft-compress
+      - traefik.http.services.ft-web.loadbalancer.server.port=3000
+
+  postgres:
+    image: postgres:18-alpine
+    container_name: ft-postgres
+    restart: unless-stopped
+    mem_limit: 256m
+    logging: *logging
+    environment:
+      POSTGRES_DB: filetransfer
+      POSTGRES_USER: filetransfer
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+    volumes:
+      - /opt/filetransfer/pgdata:/var/lib/postgresql # PG 18 keeps its versioned dir under here
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U filetransfer -d filetransfer"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [ft] # never published, never on the Traefik network
+
+  redis:
+    image: redis:8-alpine
+    container_name: ft-redis
+    restart: unless-stopped
+    mem_limit: 96m
+    logging: *logging
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "64mb", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - /opt/filetransfer/redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [ft]
+
+networks:
+  web:
+    name: web
+    external: true # created by the existing Traefik stack
+  ft:
+    name: ft
