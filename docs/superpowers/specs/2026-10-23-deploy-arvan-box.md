@@ -1,6 +1,6 @@
 # Deploy filetransfer.ir to the Arvan box (RFC record)
 
-Status: decided 2026-10-23, scripts written, **first real deploy not yet run**. Issue: #12.
+Status: decided 2026-10-23, scripts merged (#13, #15), box bootstrapped, **first real deploy not yet run: blocked on the Arvan access-key pair** (see section 4 and `docs/handoff/2026-10-23-deploy-blocked-on-access-key.md`). Issue: #12.
 Template: `nexus-platform-ir/deploy/webcad` (build on the Mac, ship a tarball, remote script verifies and rolls back).
 
 ## 1. Verified live state (2026-10-22 and 2026-10-23, read-only SSH to `85.198.52.103`)
@@ -14,7 +14,11 @@ Template: `nexus-platform-ir/deploy/webcad` (build on the Mac, ship a tarball, r
 | Nightly Supabase backup at 03:30 via `/opt/webcad/backup.sh` | `ls /opt/webcad/backups`, `/etc/cron.d/webcad-backup` | Ours is separate (`/etc/cron.d/filetransfer-backup`, 03:45). |
 | Docker Hub and ghcr answer (401 unauthenticated) | `curl` from the box | One-time base-image pull at bootstrap works; deploys never need a registry. |
 | `filetransfer.ir` is registered at IRNIC but has **no nameservers**, and is not in the Cloudflare account | `whois -h whois.nic.ir`, `dig`, infra `zone_status` | No public DNS or TLS for it yet. |
-| `scripts/promote` exists; repo has 0 tags; `main` is the scaffold | `git tag`, `scripts/promote` | Nothing is releasable until #7, #10, #11 merge and a tag is promoted. |
+| `scripts/promote` exists; repo has 0 tags; `main` is the scaffold, and `origin/main` does not exist yet | `git tag`, `git branch -r`, `scripts/promote` | The first `promote` creates it (the script handles a first release). It refuses a dirty tree. |
+| `webcad.ir` has a **wildcard** record: any undefined subdomain resolved to `185.206.93.107` (AbrArvan), not our box. An explicit `ft A 85.198.52.103` record overrides it (verified 2026-10-23 via `1.1.1.1` and `8.8.8.8`, TTL 120) | `dig`, `curl -I` | Without the explicit record, Let's Encrypt and the health check would hit the wrong server. Keep the Arvan proxy toggle OFF for this record so HTTP-01 reaches Traefik. |
+| `webcad.ir` nameservers are Arvan's (`*.ns.arvancdn.ir`); the `infra` MCP only manages Cloudflare | `dig NS`, `zone_status` | DNS for this zone is edited in the Arvan panel by hand. |
+| Bucket `filetransfer` exists (Standard, Iran Central 1, private). The panel shows its endpoint as `s3.ir-central1.arvanstorage.ir`. An anonymous request returns `AccessDenied` with `BucketName=filetransfer`; the request ID ends `ir-thr-at1`, so `ir-central1` is a newer hostname for the same Tehran cluster. Both hostnames resolve. | `curl` (no credentials), `dig` | The research notes' `ir-thr-at1` is stale. The SigV4 **signing region** string is **not verified** (needs a key pair). |
+| Arvan's panel has a CORS form: Origin, Allowed Method (GET/PUT/POST/DELETE/HEAD), Allowed Header, Max Age. No "expose headers" field. | pasted panel text | We do not need `ETag` exposed: `putPart` only checks the status code and the API takes the part list from the bucket's ListParts at `complete`. |
 
 ## 2. Decisions
 
@@ -42,15 +46,25 @@ Template: `nexus-platform-ir/deploy/webcad` (build on the Mac, ship a tarball, r
 
 ## 4. Prerequisites only a human can do (the deploy is gated on these)
 
-- [ ] Merge #7, #10, #11 (in that order), then cut the first tag with `scripts/promote`.
-- [ ] DNS: an `A` record `ft.webcad.ir` -> `85.198.52.103` (needed before Let's Encrypt can issue the certificate).
-- [ ] Kavenegar: an account, API key, and an approved verify/lookup template that takes one token.
-- [ ] Arvan: a bucket, an access key pair, and a CORS rule for the app origin (`PUT`, `GET`, `HEAD`; `AllowedHeader *`; expose `ETag`). Without CORS every browser upload part is blocked, which we reproduced locally.
-- [ ] Run `deploy/filetransfer/bootstrap.sh`, then edit the five placeholders it lists in `/opt/filetransfer/app.env` on the box.
+State as of 2026-10-23 03:40 +0330:
+
+- [x] Merge #7, #11, #13, #14, #15 into `dev` (#10 was closed by GitHub, replaced by #14).
+- [ ] Cut the first tag: `scripts/promote v0.1.0`. The main checkout must be clean (it has one uncommitted `.gitignore` line, `.claude-drafts/`: discard or PR it first).
+- [x] DNS: `ft.webcad.ir` -> `85.198.52.103` (explicit record, proxy off).
+- [x] Kavenegar API key and template copied on the box from the webcad Supabase env (`/opt/webcad/supabase/.env`, `KAVENEGAR_TEMPLATE` -> `KAVENEGAR_VERIFY_TEMPLATE`). **The template is `houshkar`, another product's: users would see its wording.** Replace it with a filetransfer-specific, Kavenegar-approved template before launch (approval takes time; one line in `app.env`).
+- [x] Arvan bucket `filetransfer` created (settings: Standard, Tehran, multi-zone off, Object Lock off, private, versioning off).
+- [ ] **Arvan access key pair** (`OBJECT_STORAGE_ACCESS_KEY`, `OBJECT_STORAGE_SECRET_KEY`): still `CHANGE_ME`, which makes `ft-deploy` refuse to run. This is the only placeholder left.
+- [ ] CORS rule in the Arvan panel: origin `https://ft.webcad.ir`, methods `PUT`/`GET`/`HEAD`, allowed header `*`, max age `3600`. Then check from outside with an unauthenticated `OPTIONS` preflight (see the handoff). Without CORS every browser upload part is blocked, which we reproduced locally.
+- [ ] Verify the signing region with the new keys (`aws s3api head-bucket --endpoint-url https://s3.ir-central1.arvanstorage.ir --region ir-central1`, then `ir-thr-at1`). `app.env` currently has `ir-central1` for endpoint, public endpoint and region.
+- [x] `deploy/filetransfer/bootstrap.sh` ran on the box: `/opt/filetransfer` tree, `app.env` (mode 600, generated Postgres password and `OTP_SECRET`), base images pulled, `/etc/cron.d/filetransfer-backup` at 03:45. Existing containers were untouched.
 
 ## 5. Not covered / known risks
 
-- Not exercised against the real box yet: only syntax, lint, local image builds, the backup script (success and failure), the env generator and the placeholder check have been tested.
+- Not exercised against the real box yet: `build.sh`, `ship.sh` and `ft-deploy` have only had syntax, lint, local image builds, the backup script (success and failure), the env generator and the placeholder check tested. `bootstrap.sh` has run for real.
+- Found in the bootstrap dry run, before it touched the box: `pgdata` was created `0700 root:root`, but it is bind-mounted at `/var/lib/postgresql` and Postgres runs as `postgres`, so first start failed with `mkdir: can't create directory '/var/lib/postgresql/18/': Permission denied`. Fixed in #15 (`0755`; Postgres locks its own versioned directory to `0700`). Reproduced and verified with a root-owned tmpfs, because a Docker Desktop bind mount does not reproduce the ownership. `redisdata` (`0700`) works: the Redis entrypoint chowns `/data`.
+- The signing region (`ir-central1` vs `ir-thr-at1`) is unverified. A wrong value passes the deploy health check and then fails every browser upload with a signature error, so test it before shipping.
+- `GET /api/v1/config` returns `"uploadProtocol":"tus"`, a stale string from the scaffold; uploads are S3 multipart. Harmless, but fix it before anything reads it.
+- Abandoned multipart uploads leave parts in the bucket (billed) until aborted. Not checked: whether the API reaps them, and whether Arvan supports an abort-incomplete-multipart lifecycle rule.
 - The box is shared with webcad.ir; a bad deploy here can only affect the `ft-*` containers, but a full disk or memory exhaustion would affect both. Memory limits and the 80% disk gate are the guards.
 - `sshd` on the box has contradictory `PasswordAuthentication` lines across its config files. Out of scope here; worth a separate look.
 - Redis persistence is on (AOF) so sessions survive restarts; losing it only signs users out.

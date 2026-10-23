@@ -17,7 +17,7 @@ Status key: CONFIRMED (a doc page says it), PARTIAL, NOT IN KB.
 | Per-user usage reporting | NOT IN KB | A Prometheus metrics endpoint (60 s) and a Grafana dashboard (#20106) exist, but nothing per user. Meter ourselves from presign/complete events; use access logs only as a cross-check. | #4 |
 | Storage rate (3,000 vs 1,400 toman/GB) | NOT IN KB | Likely PAYG vs bundle overage (a guess). | #4 |
 | Request pricing, multipart part counting | NOT IN KB | Docs say there is no request or traffic limit; nothing on billing. | #4 |
-| Endpoints | CONFIRMED | `ir-thr-at1`, `ir-tbz-sh1`. | infra |
+| Endpoints | CONFIRMED, **superseded 2026-10-23** | `ir-thr-at1`, `ir-tbz-sh1`. The panel now shows `s3.ir-central1.arvanstorage.ir` for a new Tehran bucket; an anonymous request's ID shows the same `ir-thr-at1` cluster behind it. The SigV4 signing region for the new name is unverified. See `docs/superpowers/specs/2026-10-23-deploy-arvan-box.md`. | infra |
 
 ## CDN
 
