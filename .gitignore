@@ -9,3 +9,6 @@ coverage/
 
 # branch-rules: per-issue worktrees
 .worktrees/
+
+# Claude Code issue drafts (local archive)
+.claude-drafts/
