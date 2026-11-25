@@ -130,8 +130,15 @@ if [ -n "$ROBOTS" ]; then
   grep -qix "x-robots-tag: $ROBOTS" <<<"$hdr" || fail "X-Robots-Tag is not \"$ROBOTS\" on $URL"
 fi
 
-# /api must reach the Go API (an unauthenticated JSON 401), not fall through to the web app's 404 page.
-code=$(curl -s -o /tmp/ft-me.json -w '%{http_code}' --max-time 8 "${RES[@]}" "$URL/api/v1/auth/me" || true)
+# /api must reach the Go API (an unauthenticated JSON 401), not fall through to the web app.
+# Traefik adds the API route only after it sees the container turn healthy, a moment after Docker
+# reports it. Until then /api lands on the web app, which answers 500. So wait for the route.
+code=""
+for _ in $(seq 1 30); do
+  code=$(curl -s -o /tmp/ft-me.json -w '%{http_code}' --max-time 8 "${RES[@]}" "$URL/api/v1/auth/me" || true)
+  { [ "$code" = 401 ] && grep -q unauthenticated /tmp/ft-me.json; } && break
+  sleep 2
+done
 { [ "$code" = 401 ] && grep -q unauthenticated /tmp/ft-me.json; } || fail "$URL/api/v1/auth/me returned $code, expected the API's 401"
 rm -f /tmp/ft-me.json
 
