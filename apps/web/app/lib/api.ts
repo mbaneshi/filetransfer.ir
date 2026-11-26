@@ -12,6 +12,13 @@ const MESSAGES: Record<string, string> = {
   send_failed: "ارسال پیامک ناموفق بود. دوباره تلاش کنید.",
   unauthenticated: "ابتدا وارد حساب خود شوید.",
   file_too_large: "حجم فایل از حد مجاز بیشتر است.",
+  no_active_plan: "برای آپلود به یک طرح فعال نیاز دارید.",
+  file_too_large_for_plan: "حجم این فایل از سقف هر فایل در طرح شما بیشتر است.",
+  storage_full: "فضای ذخیره‌سازی طرح شما پر است. چند فایل را حذف کنید یا طرح بزرگ‌تری بگیرید.",
+  plan_expired: "اشتراک صاحب این فایل به پایان رسیده و دانلود فعلاً ممکن نیست.",
+  traffic_exhausted: "ترافیک دانلود صاحب این فایل در این دوره تمام شده است.",
+  invalid_expiry: "مدت اعتبار لینک معتبر نیست.",
+  not_ready: "این فایل هنوز کامل آپلود نشده است.",
   invalid_name: "نام فایل معتبر نیست.",
   invalid_size: "فایل خالی است.",
   storage_unavailable: "فضای ذخیره‌سازی در دسترس نیست. کمی بعد تلاش کنید.",
@@ -56,3 +63,7 @@ export function formatBytes(n: number): string {
   }
   return `${new Intl.NumberFormat("fa-IR", { maximumFractionDigits: 1 }).format(n)} ${units[i]}`;
 }
+
+const DAY = 86_400_000;
+export const daysUntil = (iso: string) => Math.max(0, Math.ceil((new Date(iso).getTime() - Date.now()) / DAY));
+export const formatDate = (iso: string) => new Intl.DateTimeFormat("fa-IR", { dateStyle: "long" }).format(new Date(iso));

@@ -233,6 +233,18 @@ footer { border-top: 1px solid var(--line); padding: 25px 0 30px; color: var(--m
 .dash { margin: 20px auto 0; text-align: center; }
 .bar { height: 8px; background: var(--line); border-radius: 99px; overflow: hidden; margin: 16px 0 10px; }
 .bar i { display: block; height: 100%; background: var(--g-intro); transition: width .2s; }
+.account { max-width: 600px; margin: 20px auto 0; background: var(--ink-2); border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px; }
+.account header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
+.account h3 { font-size: 15px; margin: 0; }
+.account h3 b { color: var(--accent); }
+.account p { margin: 12px 0 0; }
+.account p a { color: var(--accent); }
+.account .warn { color: var(--accent); font-size: 13px; }
+.meter { margin-top: 14px; font-size: 12px; color: var(--mist-2); }
+.meter div { display: flex; justify-content: space-between; gap: 12px; }
+.meter .bar { margin: 6px 0 0; height: 6px; }
+.meter .bar.full i { background: var(--danger); }
+.field.pick { width: auto; max-width: 150px; }
 .list { max-width: 600px; margin: 36px auto 70px; }
 .list h3 { font-size: 15px; }
 .muted { color: var(--mist-2); font-size: 13px; }
