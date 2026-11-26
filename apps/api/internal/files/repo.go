@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"filetransfer.ir/api/internal/plans"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -22,6 +23,16 @@ type File struct {
 	UploadID    string    `json:"-"`
 	PartSize    int64     `json:"partSize"`
 	CreatedAt   time.Time `json:"createdAt"`
+	// ExpiresAt is when the plan's retention removes the file. Zero means no retention date.
+	ExpiresAt time.Time `json:"expiresAt,omitzero"`
+}
+
+// Download is one hand-out of a file through a share link.
+type Download struct {
+	FileID     string
+	OwnerID    string
+	ShareToken string
+	SizeBytes  int64
 }
 
 type Share struct {
@@ -40,15 +51,31 @@ type Repo interface {
 	StaleUploads(ctx context.Context, olderThan time.Time, limit int) ([]File, error)
 	CreateShare(ctx context.Context, s Share) error
 	GetShare(ctx context.Context, token string) (Share, error)
+
+	// LatestSubscription returns the owner's most recent subscription that has started by now.
+	LatestSubscription(ctx context.Context, userID string, now time.Time) (plans.Subscription, error)
+	// StorageUsed is the space the owner holds: finished files plus uploads in progress.
+	StorageUsed(ctx context.Context, ownerID string) (int64, error)
+	// TrafficUsed is the download volume handed out for the owner since the given time.
+	TrafficUsed(ctx context.Context, ownerID string, since time.Time) (int64, error)
+	RecordDownload(ctx context.Context, d Download) error
+	// ExpiredFiles lists files past their retention date.
+	ExpiredFiles(ctx context.Context, now time.Time, limit int) ([]File, error)
+	// LapsedFiles lists files of owners who once had a plan and whose last plan ended before cutoff.
+	LapsedFiles(ctx context.Context, cutoff time.Time, limit int) ([]File, error)
 }
 
 type PG struct{ Pool *pgxpool.Pool }
 
-const cols = `id::text, owner_id::text, object_key, name, size_bytes, content_type, status, coalesce(upload_id, ''), part_size, created_at`
+const cols = `id::text, owner_id::text, object_key, name, size_bytes, content_type, status, coalesce(upload_id, ''), part_size, created_at, expires_at`
 
 func scan(row pgx.Row) (File, error) {
 	var f File
-	err := row.Scan(&f.ID, &f.OwnerID, &f.ObjectKey, &f.Name, &f.SizeBytes, &f.ContentType, &f.Status, &f.UploadID, &f.PartSize, &f.CreatedAt)
+	var expires *time.Time
+	err := row.Scan(&f.ID, &f.OwnerID, &f.ObjectKey, &f.Name, &f.SizeBytes, &f.ContentType, &f.Status, &f.UploadID, &f.PartSize, &f.CreatedAt, &expires)
+	if expires != nil {
+		f.ExpiresAt = *expires
+	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		return f, ErrNotFound
 	}
@@ -57,9 +84,9 @@ func scan(row pgx.Row) (File, error) {
 
 func (p PG) Create(ctx context.Context, f File) (File, error) {
 	return scan(p.Pool.QueryRow(ctx, `
-		INSERT INTO files (owner_id, object_key, name, size_bytes, content_type, status, upload_id, part_size)
-		VALUES ($1::uuid, $2, $3, $4, $5, 'uploading', $6, $7)
-		RETURNING `+cols, f.OwnerID, f.ObjectKey, f.Name, f.SizeBytes, f.ContentType, f.UploadID, f.PartSize))
+		INSERT INTO files (owner_id, object_key, name, size_bytes, content_type, status, upload_id, part_size, expires_at)
+		VALUES ($1::uuid, $2, $3, $4, $5, 'uploading', $6, $7, $8)
+		RETURNING `+cols, f.OwnerID, f.ObjectKey, f.Name, f.SizeBytes, f.ContentType, f.UploadID, f.PartSize, nullTime(f.ExpiresAt)))
 }
 
 func (p PG) Get(ctx context.Context, id string) (File, error) {
@@ -70,20 +97,7 @@ func (p PG) Get(ctx context.Context, id string) (File, error) {
 }
 
 func (p PG) ListReady(ctx context.Context, ownerID string) ([]File, error) {
-	rows, err := p.Pool.Query(ctx, `SELECT `+cols+` FROM files WHERE owner_id = $1::uuid AND status = 'ready' ORDER BY created_at DESC LIMIT 500`, ownerID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []File
-	for rows.Next() {
-		f, err := scan(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, f)
-	}
-	return out, rows.Err()
+	return p.query(ctx, `SELECT `+cols+` FROM files WHERE owner_id = $1::uuid AND status = 'ready' ORDER BY created_at DESC LIMIT 500`, ownerID)
 }
 
 func (p PG) MarkReady(ctx context.Context, id string) error {
@@ -97,7 +111,11 @@ func (p PG) MarkDeleted(ctx context.Context, id string) error {
 }
 
 func (p PG) StaleUploads(ctx context.Context, olderThan time.Time, limit int) ([]File, error) {
-	rows, err := p.Pool.Query(ctx, `SELECT `+cols+` FROM files WHERE status = 'uploading' AND created_at < $1 ORDER BY created_at LIMIT $2`, olderThan, limit)
+	return p.query(ctx, `SELECT `+cols+` FROM files WHERE status = 'uploading' AND created_at < $1 ORDER BY created_at LIMIT $2`, olderThan, limit)
+}
+
+func (p PG) query(ctx context.Context, sql string, args ...any) ([]File, error) {
+	rows, err := p.Pool.Query(ctx, sql, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -111,6 +129,56 @@ func (p PG) StaleUploads(ctx context.Context, olderThan time.Time, limit int) ([
 		out = append(out, f)
 	}
 	return out, rows.Err()
+}
+
+func nullTime(t time.Time) *time.Time {
+	if t.IsZero() {
+		return nil
+	}
+	return &t
+}
+
+func (p PG) LatestSubscription(ctx context.Context, userID string, now time.Time) (plans.Subscription, error) {
+	var s plans.Subscription
+	err := p.Pool.QueryRow(ctx, `
+		SELECT id::text, user_id::text, plan, starts_at, expires_at FROM subscriptions
+		WHERE user_id = $1::uuid AND starts_at <= $2
+		ORDER BY starts_at DESC, created_at DESC LIMIT 1`, userID, now).Scan(&s.ID, &s.UserID, &s.PlanID, &s.StartsAt, &s.ExpiresAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return s, ErrNotFound
+	}
+	return s, err
+}
+
+func (p PG) StorageUsed(ctx context.Context, ownerID string) (int64, error) {
+	var n int64
+	err := p.Pool.QueryRow(ctx, `SELECT coalesce(sum(size_bytes), 0)::bigint FROM files WHERE owner_id = $1::uuid AND status IN ('uploading', 'ready')`, ownerID).Scan(&n)
+	return n, err
+}
+
+func (p PG) TrafficUsed(ctx context.Context, ownerID string, since time.Time) (int64, error) {
+	var n int64
+	err := p.Pool.QueryRow(ctx, `SELECT coalesce(sum(size_bytes), 0)::bigint FROM downloads WHERE owner_id = $1::uuid AND created_at >= $2`, ownerID, since).Scan(&n)
+	return n, err
+}
+
+func (p PG) RecordDownload(ctx context.Context, d Download) error {
+	_, err := p.Pool.Exec(ctx, `INSERT INTO downloads (file_id, owner_id, share_token, size_bytes) VALUES ($1::uuid, $2::uuid, $3, $4)`, d.FileID, d.OwnerID, d.ShareToken, d.SizeBytes)
+	return err
+}
+
+func (p PG) ExpiredFiles(ctx context.Context, now time.Time, limit int) ([]File, error) {
+	return p.query(ctx, `SELECT `+cols+` FROM files WHERE status = 'ready' AND expires_at < $1 ORDER BY expires_at LIMIT $2`, now, limit)
+}
+
+// LapsedFiles never touches owners without any subscription row, so files from before plans existed are left alone.
+func (p PG) LapsedFiles(ctx context.Context, cutoff time.Time, limit int) ([]File, error) {
+	return p.query(ctx, `
+		SELECT `+cols+` FROM files f
+		WHERE f.status IN ('uploading', 'ready')
+		  AND EXISTS (SELECT 1 FROM subscriptions s WHERE s.user_id = f.owner_id)
+		  AND NOT EXISTS (SELECT 1 FROM subscriptions s WHERE s.user_id = f.owner_id AND s.expires_at >= $1)
+		ORDER BY f.created_at LIMIT $2`, cutoff, limit)
 }
 
 func (p PG) CreateShare(ctx context.Context, s Share) error {

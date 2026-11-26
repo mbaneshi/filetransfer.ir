@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"filetransfer.ir/api/internal/auth"
+	"filetransfer.ir/api/internal/plans"
 	"filetransfer.ir/api/internal/storage"
 )
 
@@ -51,10 +52,13 @@ func (s *fakeStore) PresignDownload(_ context.Context, key, name string, _ time.
 func (s *fakeStore) Delete(_ context.Context, key string) error { s.deleted[key] = true; return nil }
 
 type memRepo struct {
-	files  map[string]File
-	shares map[string]Share
-	n      int
-	now    func() time.Time
+	files     map[string]File
+	shares    map[string]Share
+	subs      []plans.Subscription
+	downloads []Download
+	dlTimes   []time.Time
+	n         int
+	now       func() time.Time
 }
 
 func newMemRepo() *memRepo {
@@ -112,6 +116,70 @@ func (m *memRepo) GetShare(_ context.Context, t string) (Share, error) {
 	return s, nil
 }
 
+func (m *memRepo) LatestSubscription(_ context.Context, user string, now time.Time) (plans.Subscription, error) {
+	var best plans.Subscription
+	found := false
+	for _, s := range m.subs {
+		if s.UserID == user && !s.StartsAt.After(now) && (!found || s.StartsAt.After(best.StartsAt)) {
+			best, found = s, true
+		}
+	}
+	if !found {
+		return best, ErrNotFound
+	}
+	return best, nil
+}
+func (m *memRepo) StorageUsed(_ context.Context, owner string) (int64, error) {
+	var n int64
+	for _, f := range m.files {
+		if f.OwnerID == owner && f.Status != "deleted" {
+			n += f.SizeBytes
+		}
+	}
+	return n, nil
+}
+func (m *memRepo) TrafficUsed(_ context.Context, owner string, since time.Time) (int64, error) {
+	var n int64
+	for i, d := range m.downloads {
+		if d.OwnerID == owner && !m.dlTimes[i].Before(since) {
+			n += d.SizeBytes
+		}
+	}
+	return n, nil
+}
+func (m *memRepo) RecordDownload(_ context.Context, d Download) error {
+	m.downloads, m.dlTimes = append(m.downloads, d), append(m.dlTimes, m.now())
+	return nil
+}
+func (m *memRepo) ExpiredFiles(_ context.Context, now time.Time, _ int) ([]File, error) {
+	var out []File
+	for _, f := range m.files {
+		if f.Status == "ready" && !f.ExpiresAt.IsZero() && f.ExpiresAt.Before(now) {
+			out = append(out, f)
+		}
+	}
+	return out, nil
+}
+func (m *memRepo) LapsedFiles(_ context.Context, cutoff time.Time, _ int) ([]File, error) {
+	var out []File
+	for _, f := range m.files {
+		if f.Status == "deleted" {
+			continue
+		}
+		had, live := false, false
+		for _, s := range m.subs {
+			if s.UserID == f.OwnerID {
+				had = true
+				live = live || !s.ExpiresAt.Before(cutoff)
+			}
+		}
+		if had && !live {
+			out = append(out, f)
+		}
+	}
+	return out, nil
+}
+
 // whoAmI reads the user from an X-User header so tests can switch identity.
 type whoAmI struct{}
 
@@ -137,6 +205,22 @@ func newEnv(t *testing.T) *env {
 	e.mux = http.NewServeMux()
 	h.Register(e.mux)
 	return e
+}
+
+// newPlanEnv is newEnv with prepaid plans enforced and a clock the test controls.
+func newPlanEnv(t *testing.T) *env {
+	e := &env{t: t, store: newFakeStore(), repo: newMemRepo(), now: time.Date(2026, 12, 1, 10, 0, 0, 0, time.UTC)}
+	e.repo.now = func() time.Time { return e.now }
+	h := &Handlers{Repo: e.repo, Store: e.store, Users: whoAmI{}, MaxFileSize: 50 << 30, EnforcePlans: true,
+		PublicBaseURL: "https://filetransfer.ir/", Now: func() time.Time { return e.now }}
+	e.mux = http.NewServeMux()
+	h.Register(e.mux)
+	return e
+}
+
+// activate gives the user a plan starting now for the standard period.
+func (e *env) activate(user, plan string) {
+	e.repo.subs = append(e.repo.subs, plans.Subscription{UserID: user, PlanID: plan, StartsAt: e.now, ExpiresAt: e.now.Add(plans.Period)})
 }
 
 func (e *env) do(user, method, path, body string) *httptest.ResponseRecorder {
