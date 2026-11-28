@@ -1,7 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, errorMessage, toEnglishDigits } from "../lib/api";
+import { safeNext } from "../lib/session";
+import { Footer } from "../ui/Footer";
+import { BackLink, SiteNav } from "../ui/SiteNav";
 
 export default function LoginPage() {
   const [step, setStep] = useState<"phone" | "code">("phone");
@@ -9,6 +12,10 @@ export default function LoginPage() {
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const next = () => safeNext(new URLSearchParams(window.location.search).get("next"));
+
+  // Already logged in: skip the form.
+  useEffect(() => { api("/auth/me").then(() => window.location.replace(next()), () => {}); }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -20,7 +27,7 @@ export default function LoginPage() {
         setStep("code");
       } else {
         await api("/auth/otp/verify", { method: "POST", json: { phone: toEnglishDigits(phone), code: toEnglishDigits(code) } });
-        window.location.href = "/upload";
+        window.location.href = next();
       }
     } catch (err) {
       setError(errorMessage(err));
@@ -30,8 +37,10 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="shell narrow">
-      <a href="/" className="brand"><span className="brandMark">↑</span> FileTransfer</a>
+    <main className="shell">
+      <SiteNav />
+      <div className="narrow">
+      <BackLink />
       <form className="card" onSubmit={submit}>
         <h2>{step === "phone" ? "ورود با شماره موبایل" : "کد تأیید را وارد کنید"}</h2>
         <p>{step === "phone" ? "کد تأیید برای شما پیامک می‌شود." : `کد به ${phone} ارسال شد.`}</p>
@@ -44,6 +53,8 @@ export default function LoginPage() {
         <button className="primary wide" disabled={busy}>{busy ? "کمی صبر کنید…" : step === "phone" ? "ارسال کد" : "ورود"}</button>
         {step === "code" && <button type="button" className="login" onClick={() => { setStep("phone"); setCode(""); setError(""); }}>تغییر شماره</button>}
       </form>
+      </div>
+      <Footer />
     </main>
   );
 }

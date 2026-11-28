@@ -1,27 +1,19 @@
 import { GRACE_DAYS, PLAN_DAYS, PLANS, fa } from "./lib/plans";
 import { Footer } from "./ui/Footer";
-import { ThemeToggle } from "./ui/ThemeToggle";
+import { SiteNav } from "./ui/SiteNav";
+import { UploadCta } from "./ui/UploadCta";
 
 export default function HomePage() {
   return (
     <main className="shell">
-      <nav className="nav">
-        <div className="brand"><span className="brandMark">↑</span> FileTransfer</div>
-        <div className="navLinks"><a href="#plans">تعرفه‌ها</a><a href="#help">راهنما</a><a className="login" href="/login">ورود</a><ThemeToggle /></div>
-      </nav>
+      <SiteNav />
 
       <section className="hero">
         <div className="eyebrow">ساده، سریع، ایرانی</div>
         <h1>فایل‌هایتان را<br /><span>آسان منتقل کنید.</span></h1>
         <p>آپلود و اشتراک‌گذاری فایل‌های حجیم تا ۵۰ گیگابایت، با لینک مستقیم و امن.</p>
 
-        <div className="uploadCard">
-          <div className="uploadIcon">↑</div>
-          <h2>فایل خود را اینجا رها کنید</h2>
-          <p>یا برای انتخاب فایل کلیک کنید</p>
-          <a className="primary" href="/upload">انتخاب فایل</a>
-          <small>حداکثر حجم هر فایل: ۵۰ گیگابایت</small>
-        </div>
+        <UploadCta />
 
         <div className="trust"><span>✓ بدون نیاز به نصب</span><span>✓ لینک اختصاصی</span><span>✓ سرعت بالا در ایران</span></div>
       </section>
