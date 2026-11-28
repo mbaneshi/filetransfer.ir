@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, api, errorMessage, formatBytes } from "../lib/api";
 import { startUpload, type UploadHandle } from "../lib/upload";
+import { ThemeToggle } from "../ui/ThemeToggle";
 
 type FileRow = { id: string; name: string; sizeBytes: number; createdAt: string };
 
@@ -72,7 +73,7 @@ export default function UploadPage() {
     <main className="shell">
       <nav className="nav">
         <a href="/" className="brand"><span className="brandMark">↑</span> FileTransfer</a>
-        <button className="login" onClick={logout}>خروج</button>
+        <div className="navLinks"><button className="login" onClick={logout}>خروج</button><ThemeToggle /></div>
       </nav>
 
       <section
