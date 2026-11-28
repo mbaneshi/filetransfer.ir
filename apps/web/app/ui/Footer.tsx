@@ -9,6 +9,7 @@ export function Footer() {
       <div className="footMeta">
         <span>© ۱۴۰۵ <bdi>{SITE.name}</bdi></span>
         <span>اداره‌کننده: <a href={SITE.operatorUrl} rel="me noopener" target="_blank">{SITE.operator}</a></span>
+        <span>طراحی و توسعه: <a href={SITE.operatorUrl} rel="noopener" target="_blank"><bdi>mbaneshi.ir</bdi></a></span>
       </div>
     </footer>
   );

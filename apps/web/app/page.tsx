@@ -1,12 +1,13 @@
 import { GRACE_DAYS, PLAN_DAYS, PLANS, fa } from "./lib/plans";
 import { Footer } from "./ui/Footer";
+import { ThemeToggle } from "./ui/ThemeToggle";
 
 export default function HomePage() {
   return (
     <main className="shell">
       <nav className="nav">
         <div className="brand"><span className="brandMark">↑</span> FileTransfer</div>
-        <div className="navLinks"><a href="#plans">تعرفه‌ها</a><a href="#help">راهنما</a><a className="login" href="/login">ورود</a></div>
+        <div className="navLinks"><a href="#plans">تعرفه‌ها</a><a href="#help">راهنما</a><a className="login" href="/login">ورود</a><ThemeToggle /></div>
       </nav>
 
       <section className="hero">

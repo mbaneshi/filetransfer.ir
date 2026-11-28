@@ -1,13 +1,14 @@
 import type { ReactNode } from "react";
 import { SITE } from "../lib/site";
 import { Footer } from "./Footer";
+import { ThemeToggle } from "./ThemeToggle";
 
 export function LegalPage({ title, children }: { title: string; children: ReactNode }) {
   return (
     <main className="shell">
       <nav className="nav">
         <a href="/" className="brand"><span className="brandMark">↑</span> FileTransfer</a>
-        <div className="navLinks"><a href="/#plans">تعرفه‌ها</a><a className="login" href="/login">ورود</a></div>
+        <div className="navLinks"><a href="/#plans">تعرفه‌ها</a><a className="login" href="/login">ورود</a><ThemeToggle /></div>
       </nav>
       <article className="prose">
         <h1>{title}</h1>

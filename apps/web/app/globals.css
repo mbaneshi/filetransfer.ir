@@ -17,6 +17,27 @@
   --ease: cubic-bezier(.25,.46,.45,.94);
 }
 
+/* Light theme: same token names, flipped values (mbaneshi.ir). ThemeToggle sets data-theme on <html>. */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --ink: #f6f5f1;      /* warm paper */
+  --ink-2: #ffffff;
+  --line: #e2e0d9;
+  --mist: #1a1a1a;
+  --mist-2: #55554f;
+  --accent: #b8892a;   /* gold darkened for contrast on paper */
+  --danger: #b84545;
+}
+:root[data-theme="light"] body {
+  background-image:
+    radial-gradient(60rem 40rem at 15% -10%, rgba(74,134,197,.28), transparent 60%),
+    radial-gradient(50rem 36rem at 95% 10%, rgba(138,111,181,.26), transparent 60%),
+    radial-gradient(48rem 40rem at 80% 70%, rgba(79,174,154,.20), transparent 60%),
+    radial-gradient(44rem 36rem at 5% 100%, rgba(229,181,59,.22), transparent 60%);
+}
+:root[data-theme="light"] ::selection { background: #1a1a1a; color: #fff; }
+:root[data-theme="light"] .mono-icon { background: #1a1a1a; color: #fff; }
+
 * { box-sizing: border-box; }
 html { overflow-x: clip; }
 body {
@@ -55,6 +76,17 @@ a { color: inherit; text-decoration: none; }
 .login:hover { color: var(--mist); }
 .danger, .login.danger { color: var(--danger); }
 
+/* Monochrome icon buttons (mbaneshi.ir): white glyph on black, lights up on hover. */
+.mono-icon {
+  background: #000; color: #fff; border: 1px solid var(--line); cursor: pointer;
+  transition: background 200ms var(--ease), color 200ms var(--ease), border-color 200ms var(--ease);
+}
+.mono-icon:hover, .mono-icon:focus-visible { background: var(--brand, #4a86c5); color: #fff; border-color: transparent; }
+.themeToggle { display: inline-grid; place-items: center; width: 32px; height: 32px; padding: 0; border-radius: 6px; }
+.themeToggle svg { width: 16px; height: 16px; }
+.icon-moon { display: none; } .icon-sun { display: block; }
+:root[data-theme="light"] .icon-moon { display: block; } :root[data-theme="light"] .icon-sun { display: none; }
+
 /* Hero */
 .hero { position: relative; text-align: center; padding: 75px 0 50px; }
 .hero::before {
@@ -76,6 +108,10 @@ h1 span {
   padding-bottom: .12em; /* keep descenders inside the clip box */
 }
 @supports not (background-clip: text) { h1 span { color: var(--mist); background: none; } }
+@media (prefers-reduced-motion: no-preference) {
+  h1 span { background-size: 200% 100%; animation: candy-drift 14s ease-in-out infinite alternate; }
+  @keyframes candy-drift { from { background-position: 0% 50%; } to { background-position: 100% 50%; } }
+}
 .hero > p { color: var(--mist-2); font-size: 17px; margin: 18px auto 38px; }
 
 /* Gradient-edge cards: flat surface, a border that lights up along the top and bottom edges. */
@@ -90,8 +126,27 @@ h1 span {
   -webkit-mask-composite: xor;
   mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   mask-composite: exclude;
-  opacity: .9;
+  opacity: .9; transition: opacity 200ms var(--ease);
 }
+/* On hover the edge turns into a spinning ring of the palette hues. */
+.uploadCard::after, .features article::after, .planGrid article::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1.5px; pointer-events: none; z-index: 1;
+  background: conic-gradient(from var(--ring-angle, 0deg), #b84545, #d45b3f, #e5b53b, #4fae9a, #4a86c5, #8a6fb5, #b863a0, #b84545);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  opacity: 0; transition: opacity 250ms var(--ease);
+}
+@property --ring-angle { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+.uploadCard:hover::before, .features article:hover::before, .planGrid article:hover::before { opacity: 0; }
+.uploadCard:hover::after, .features article:hover::after, .planGrid article:hover::after { opacity: 1; }
+@media (prefers-reduced-motion: no-preference) {
+  .uploadCard:hover::after, .features article:hover::after, .planGrid article:hover::after { animation: ring-spin 2.4s linear infinite; }
+  @keyframes ring-spin { to { --ring-angle: 360deg; } }
+}
+:root[data-theme="light"] .uploadCard::before, :root[data-theme="light"] .features article::before,
+:root[data-theme="light"] .planGrid article::before { opacity: .85; }
 .uploadCard { max-width: 600px; margin: auto; padding: 34px; }
 .uploadIcon {
   width: 48px; height: 48px; display: grid; place-items: center; margin: auto;
@@ -103,7 +158,7 @@ h2 { font-size: 20px; margin: 15px 0 5px; }
 .uploadCard small { display: block; margin-top: 17px; color: var(--mist-2); font-size: 11px; }
 
 .primary {
-  display: inline-block; border: 0; color: var(--ink); background: var(--accent);
+  display: inline-block; border: 0; color: #1a1a1a; background: var(--accent);
   padding: 12px 32px; border-radius: 10px; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer;
   transition: filter 200ms var(--ease), transform 200ms var(--ease);
 }
@@ -197,6 +252,6 @@ footer { border-top: 1px solid var(--line); padding: 25px 0 30px; color: var(--m
   .field.small { max-width: none; width: 100%; order: 3; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .primary, .features article, .navLinks a { transition: none; }
+  .primary, .features article, .navLinks a, .mono-icon { transition: none; }
   .primary:hover, .features article:hover { transform: none; }
 }
