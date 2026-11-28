@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, api, errorMessage, formatBytes } from "../lib/api";
 import { startUpload, type UploadHandle } from "../lib/upload";
-import { ThemeToggle } from "../ui/ThemeToggle";
+import { Footer } from "../ui/Footer";
+import { SiteNav } from "../ui/SiteNav";
 
 type FileRow = { id: string; name: string; sizeBytes: number; createdAt: string };
 
@@ -19,7 +20,7 @@ export default function UploadPage() {
     try {
       setFiles((await api<{ files: FileRow[] }>("/files")).files);
     } catch (e) {
-      if (e instanceof ApiError && e.status === 401) window.location.href = "/login";
+      if (e instanceof ApiError && e.status === 401) window.location.replace("/login?next=/upload");
       else setError(errorMessage(e));
     }
   }, []);
@@ -62,20 +63,15 @@ export default function UploadPage() {
     }
   }
 
-  async function logout() {
-    await api("/auth/logout", { method: "POST" }).catch(() => {});
-    window.location.href = "/";
-  }
-
   const pct = progress ? Math.floor((progress.sent / progress.total) * 100) : 0;
 
   return (
     <main className="shell">
-      <nav className="nav">
-        <a href="/" className="brand"><span className="brandMark">↑</span> FileTransfer</a>
-        <div className="navLinks"><button className="login" onClick={logout}>خروج</button><ThemeToggle /></div>
-      </nav>
+      <SiteNav />
 
+      {files === null ? (
+        <div className="uploadCard dash"><p className="muted">{error || "در حال بررسی ورود…"}</p></div>
+      ) : (<>
       <section
         className="uploadCard dash"
         onDragOver={(e) => e.preventDefault()}
@@ -103,7 +99,7 @@ export default function UploadPage() {
 
       <section className="list">
         <h3>فایل‌های من</h3>
-        {files === null ? <p className="muted">در حال بارگذاری…</p> : files.length === 0 ? <p className="muted">هنوز فایلی آپلود نکرده‌اید.</p> : files.map((f) => (
+        {files.length === 0 ? <p className="muted">هنوز فایلی آپلود نکرده‌اید.</p> : files.map((f) => (
           <div className="row" key={f.id}>
             <div className="grow"><b className="name">{f.name}</b><small>{formatBytes(f.sizeBytes)}</small></div>
             {links[f.id] ? <input className="field ltr small" readOnly value={links[f.id]} onFocus={(e) => e.target.select()} /> : <button className="login" onClick={() => share(f.id)}>ساخت لینک</button>}
@@ -111,6 +107,8 @@ export default function UploadPage() {
           </div>
         ))}
       </section>
+      </>)}
+      <Footer />
     </main>
   );
 }

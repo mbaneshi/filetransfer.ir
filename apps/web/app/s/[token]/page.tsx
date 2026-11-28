@@ -2,6 +2,8 @@
 
 import { use, useEffect, useState } from "react";
 import { api, errorMessage, formatBytes } from "../../lib/api";
+import { Footer } from "../../ui/Footer";
+import { BackLink, SiteNav } from "../../ui/SiteNav";
 
 export default function SharePage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = use(params);
@@ -13,8 +15,10 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
   }, [token]);
 
   return (
-    <main className="shell narrow">
-      <a href="/" className="brand"><span className="brandMark">↑</span> FileTransfer</a>
+    <main className="shell">
+      <SiteNav />
+      <div className="narrow">
+      <BackLink />
       <div className="card">
         {error ? <div className="error" role="alert">{error}</div> : !info ? <p>در حال بارگذاری…</p> : (
           <>
@@ -25,6 +29,8 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
           </>
         )}
       </div>
+      </div>
+      <Footer />
     </main>
   );
 }
