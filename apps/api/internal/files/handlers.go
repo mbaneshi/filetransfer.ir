@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"filetransfer.ir/api/internal/auth"
+	"filetransfer.ir/api/internal/plans"
 	"filetransfer.ir/api/internal/storage"
 )
 
@@ -39,7 +40,9 @@ type Handlers struct {
 	MaxFileSize int64
 	// PublicBaseURL is where shared links point (the web app), e.g. https://filetransfer.ir
 	PublicBaseURL string
-	Now           func() time.Time
+	// EnforcePlans turns on prepaid plans: no upload without an active plan, quotas, retention.
+	EnforcePlans bool
+	Now          func() time.Time
 }
 
 func NewHandlers(repo Repo, store storage.Store, users Users, maxFileSize int64, publicBaseURL string) *Handlers {
@@ -57,6 +60,8 @@ func (h *Handlers) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/files/{id}/shares", h.authed(h.createShare))
 	mux.HandleFunc("GET /api/v1/shares/{token}", h.shareInfo)
 	mux.HandleFunc("GET /api/v1/shares/{token}/download", h.shareDownload)
+	mux.HandleFunc("GET /api/v1/plans", h.listPlans)
+	mux.HandleFunc("GET /api/v1/account", h.authed(h.account))
 }
 
 type authedFunc func(http.ResponseWriter, *http.Request, auth.User)
@@ -106,6 +111,28 @@ func (h *Handlers) initUpload(w http.ResponseWriter, r *http.Request, u auth.Use
 		fail(w, http.StatusRequestEntityTooLarge, "file_too_large")
 		return
 	}
+	var expiresAt time.Time
+	if h.EnforcePlans {
+		sub, plan, ok := h.subscription(r.Context(), u.ID)
+		if !ok || !sub.Active(h.now()) {
+			fail(w, http.StatusPaymentRequired, "no_active_plan")
+			return
+		}
+		if body.Size > plan.MaxFileBytes {
+			fail(w, http.StatusRequestEntityTooLarge, "file_too_large_for_plan")
+			return
+		}
+		used, err := h.Repo.StorageUsed(r.Context(), u.ID)
+		if err != nil {
+			fail(w, http.StatusInternalServerError, "internal")
+			return
+		}
+		if used+body.Size > plan.StorageBytes {
+			fail(w, http.StatusConflict, "storage_full")
+			return
+		}
+		expiresAt = h.now().Add(plan.Retention())
+	}
 	ct := body.ContentType
 	if ct == "" || len(ct) > 200 {
 		ct = "application/octet-stream"
@@ -121,7 +148,7 @@ func (h *Handlers) initUpload(w http.ResponseWriter, r *http.Request, u auth.Use
 	ps := PartSizeFor(body.Size)
 	f, err := h.Repo.Create(r.Context(), File{
 		OwnerID: u.ID, ObjectKey: key, Name: name, SizeBytes: body.Size,
-		ContentType: ct, UploadID: uploadID, PartSize: ps,
+		ContentType: ct, UploadID: uploadID, PartSize: ps, ExpiresAt: expiresAt,
 	})
 	if err != nil {
 		_ = h.Store.Abort(r.Context(), key, uploadID)
@@ -316,6 +343,10 @@ func (h *Handlers) createShare(w http.ResponseWriter, r *http.Request, u auth.Us
 		return
 	}
 	s := Share{Token: randomToken(), FileID: f.ID, ExpiresAt: h.now().Add(ttl)}
+	// A link cannot outlive the file: retention removes the file at f.ExpiresAt.
+	if !f.ExpiresAt.IsZero() && s.ExpiresAt.After(f.ExpiresAt) {
+		s.ExpiresAt = f.ExpiresAt
+	}
 	if err := h.Repo.CreateShare(r.Context(), s); err != nil {
 		fail(w, http.StatusInternalServerError, "internal")
 		return
@@ -343,7 +374,68 @@ func (h *Handlers) shareInfo(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusNotFound, "not_found")
 		return
 	}
-	reply(w, http.StatusOK, map[string]any{"name": f.Name, "sizeBytes": f.SizeBytes, "contentType": f.ContentType})
+	reply(w, http.StatusOK, map[string]any{
+		"name": f.Name, "sizeBytes": f.SizeBytes, "contentType": f.ContentType,
+		// blocked is "" when the file can be downloaded, otherwise the reason the owner's plan stops it.
+		"blocked": h.blocked(r.Context(), f),
+	})
+}
+
+// blocked says why the owner's plan stops this download: "plan_expired", "traffic_exhausted", or "" for none.
+func (h *Handlers) blocked(ctx context.Context, f File) string {
+	if !h.EnforcePlans {
+		return ""
+	}
+	sub, plan, ok := h.subscription(ctx, f.OwnerID)
+	if !ok || !sub.Serving(h.now()) {
+		return "plan_expired"
+	}
+	used, err := h.Repo.TrafficUsed(ctx, f.OwnerID, sub.StartsAt)
+	if err != nil || used+f.SizeBytes > plan.DownloadBytes {
+		return "traffic_exhausted"
+	}
+	return ""
+}
+
+// subscription returns the user's latest started subscription and its plan.
+func (h *Handlers) subscription(ctx context.Context, userID string) (plans.Subscription, plans.Plan, bool) {
+	sub, err := h.Repo.LatestSubscription(ctx, userID, h.now())
+	if err != nil {
+		return sub, plans.Plan{}, false
+	}
+	plan, ok := plans.Get(sub.PlanID)
+	return sub, plan, ok
+}
+
+func (h *Handlers) listPlans(w http.ResponseWriter, _ *http.Request) {
+	reply(w, http.StatusOK, map[string]any{
+		"plans": plans.All(), "periodDays": int(plans.Period.Hours() / 24), "graceDays": int(plans.Grace.Hours() / 24),
+	})
+}
+
+// account reports the caller's plan and how much of it is used.
+func (h *Handlers) account(w http.ResponseWriter, r *http.Request, u auth.User) {
+	storage, err := h.Repo.StorageUsed(r.Context(), u.ID)
+	if err != nil {
+		fail(w, http.StatusInternalServerError, "internal")
+		return
+	}
+	resp := map[string]any{"plansEnforced": h.EnforcePlans, "storageUsedBytes": storage, "plan": nil}
+	if sub, plan, ok := h.subscription(r.Context(), u.ID); ok && sub.Serving(h.now()) {
+		traffic, err := h.Repo.TrafficUsed(r.Context(), u.ID, sub.StartsAt)
+		if err != nil {
+			fail(w, http.StatusInternalServerError, "internal")
+			return
+		}
+		resp["trafficUsedBytes"] = traffic
+		resp["plan"] = map[string]any{
+			"id": plan.ID, "active": sub.Active(h.now()), "startsAt": sub.StartsAt, "expiresAt": sub.ExpiresAt,
+			"filesDeletedAt": sub.ExpiresAt.Add(plans.Grace),
+			"storageBytes":   plan.StorageBytes, "downloadBytes": plan.DownloadBytes,
+			"maxFileBytes": plan.MaxFileBytes, "retentionDays": plan.RetentionDays,
+		}
+	}
+	reply(w, http.StatusOK, resp)
 }
 
 func (h *Handlers) shareDownload(w http.ResponseWriter, r *http.Request) {
@@ -352,10 +444,23 @@ func (h *Handlers) shareDownload(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusNotFound, "not_found")
 		return
 	}
+	if reason := h.blocked(r.Context(), f); reason != "" {
+		fail(w, http.StatusForbidden, reason)
+		return
+	}
 	url, err := h.Store.PresignDownload(r.Context(), f.ObjectKey, f.Name, downloadURLTTL)
 	if err != nil {
 		fail(w, http.StatusInternalServerError, "internal")
 		return
+	}
+	// Traffic is counted when the link is handed out, as the whole file. The bucket serves the bytes
+	// directly, so a cancelled download still counts and a reused link within its hour does not.
+	if h.EnforcePlans {
+		if err := h.Repo.RecordDownload(r.Context(), Download{FileID: f.ID, OwnerID: f.OwnerID, ShareToken: r.PathValue("token"), SizeBytes: f.SizeBytes}); err != nil {
+			log.Printf("record download %s: %v", f.ID, err)
+			fail(w, http.StatusInternalServerError, "internal")
+			return
+		}
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	http.Redirect(w, r, url, http.StatusFound)

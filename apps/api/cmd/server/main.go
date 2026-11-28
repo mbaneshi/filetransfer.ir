@@ -22,6 +22,9 @@ type server struct {
 }
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "plan" {
+		os.Exit(planCommand(os.Args[2:]))
+	}
 	maxFileSize := int64(50 * 1024 * 1024 * 1024)
 	if value := os.Getenv("MAX_FILE_SIZE_BYTES"); value != "" {
 		if parsed, err := strconv.ParseInt(value, 10, 64); err == nil {
@@ -54,7 +57,7 @@ func (s *server) config(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"maxFileSizeBytes": s.maxFileSize,
 		"maxFileSizeGB":    50,
-		"uploadProtocol":   "tus",
+		"uploadProtocol":   "s3-multipart",
 		"locale":           "fa-IR",
 	})
 }
@@ -147,6 +150,9 @@ func registerFiles(mux *http.ServeMux, authH *auth.Handlers, pool *pgxpool.Pool,
 	if _, err := pool.Exec(ctx, migrations.Files); err != nil {
 		log.Fatalf("migrate files: %v", err)
 	}
+	if _, err := pool.Exec(ctx, migrations.Plans); err != nil {
+		log.Fatalf("migrate plans: %v", err)
+	}
 
 	store := storage.New(storage.Config{
 		Endpoint:       endpoint,
@@ -164,6 +170,11 @@ func registerFiles(mux *http.ServeMux, authH *auth.Handlers, pool *pgxpool.Pool,
 	}
 
 	repo := files.PG{Pool: pool}
-	files.NewHandlers(repo, store, authH, maxFileSize, getenv("PUBLIC_BASE_URL", "http://localhost:3000")).Register(mux)
-	go files.RunJanitor(context.Background(), repo, store, 10*time.Minute, 24*time.Hour)
+	// PLANS_ENFORCED=0 switches prepaid plans off: uploads are open and nothing is deleted by retention.
+	enforce := getenv("PLANS_ENFORCED", "1") == "1"
+	log.Printf("prepaid plans enforced: %v", enforce)
+	h := files.NewHandlers(repo, store, authH, maxFileSize, getenv("PUBLIC_BASE_URL", "http://localhost:3000"))
+	h.EnforcePlans = enforce
+	h.Register(mux)
+	go files.RunJanitor(context.Background(), repo, store, 10*time.Minute, 24*time.Hour, enforce)
 }
